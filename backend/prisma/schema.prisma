@@ -124,7 +124,7 @@ model Activity {
   actor     User         @relation(fields: [actorId], references: [id], onDelete: Cascade)
 
   taskId    String?
-  task      Task?        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task      Task?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([projectId, createdAt])
   @@index([actorId])
@@ -171,5 +171,6 @@ enum ActivityType {
   TASK_CREATED
   TASK_UPDATED
   TASK_MOVED
+  TASK_DELETED
   COMMENT_ADDED
 }

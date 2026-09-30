@@ -4,17 +4,21 @@ import {
     useState,
 } from 'react';
 import { useParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { DndContext } from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 
 import { api } from '../api/client';
 import { useProjectSocket } from '../hooks/useProjectSocket';
 
+import { PageState } from '../components/common/PageState';
 import { CreateTaskModal } from '../components/tasks/CreateTaskModal';
 import { TaskDetailsModal } from '../components/tasks/TaskDetailsModal';
 import { KanbanColumn } from '../components/kanban/KanbanColumn';
 import { ActivityPanel } from '../components/activity/ActivityPanel';
 import type { Activity } from '../types/activity';
+
+import { AppHeader } from '../components/layout/AppHeader';
 
 import type {
     Task,
@@ -121,6 +125,9 @@ export function ProjectBoardPage() {
         useState<Task | null>(null);
 
     const [savingTask, setSavingTask] =
+        useState(false);
+
+    const [deletingTask, setDeletingTask] =
         useState(false);
 
     const [comments, setComments] =
@@ -369,23 +376,18 @@ export function ProjectBoardPage() {
                 await api.patch<Task>(
                     `/workspaces/${workspaceId}/projects/${projectId}/tasks/${selectedTask.id}`,
                     {
-                        title:
-                            selectedTask.title,
+                        title: selectedTask.title.trim(),
 
                         description:
-                            selectedTask.description ||
-                            undefined,
+                            selectedTask.description?.trim() || null,
 
-                        priority:
-                            selectedTask.priority,
+                        priority: selectedTask.priority,
 
                         dueDate:
-                            selectedTask.dueDate ||
-                            undefined,
+                            selectedTask.dueDate || null,
 
                         assigneeId:
-                            selectedTask.assignee
-                                ?.id || undefined,
+                            selectedTask.assignee?.id ?? null,
                     },
                 );
 
@@ -496,6 +498,48 @@ export function ProjectBoardPage() {
         }
     }
 
+    async function deleteSelectedTask() {
+        if (
+            !selectedTask ||
+            !workspaceId ||
+            !projectId
+        ) {
+            return;
+        }
+
+        const confirmed = window.confirm(
+            `Delete "${selectedTask.title}"? This cannot be undone.`,
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        setDeletingTask(true);
+        setError(null);
+
+        try {
+            await api.delete(
+                `/workspaces/${workspaceId}/projects/${projectId}/tasks/${selectedTask.id}`,
+            );
+
+            setTasks((currentTasks) =>
+                currentTasks.filter(
+                    (task) =>
+                        task.id !== selectedTask.id,
+                ),
+            );
+
+            setSelectedTask(null);
+            setComments([]);
+            setNewComment('');
+        } catch {
+            setError('Could not delete task.');
+        } finally {
+            setDeletingTask(false);
+        }
+    }
+
     const handleTaskCreated =
         useCallback((task: Task) => {
             setTasks((currentTasks) => {
@@ -592,6 +636,31 @@ export function ProjectBoardPage() {
         [],
     );
 
+    const handleTaskDeleted = useCallback(
+        (taskId: string) => {
+            setTasks((currentTasks) =>
+                currentTasks.filter(
+                    (task) => task.id !== taskId,
+                ),
+            );
+
+            setSelectedTask((currentTask) => {
+                if (
+                    currentTask &&
+                    currentTask.id === taskId
+                ) {
+                    setComments([]);
+                    setNewComment('');
+
+                    return null;
+                }
+
+                return currentTask;
+            });
+        },
+        [],
+    );
+
     useProjectSocket({
         projectId,
 
@@ -604,184 +673,246 @@ export function ProjectBoardPage() {
         onTaskUpdated:
             handleTaskUpdated,
 
+        onTaskDeleted: handleTaskDeleted,
         onCommentCreated:
             handleCommentCreated,
 
-        onActivityCreated: 
+        onActivityCreated:
             handleActivityCreated,
     });
 
     if (loading) {
-        return <p>Loading board...</p>;
+        return (
+            <>
+                <AppHeader />
+                <PageState
+                    title="Loading project"
+                    message="Getting the board ready..."
+                />
+            </>
+        );
     }
 
     if (error) {
-        return <p>{error}</p>;
+        return (
+            <>
+                <AppHeader />
+                <PageState
+                    title="Could not load project"
+                    message={error}
+                    tone="error"
+                />
+            </>
+        );
     }
 
     if (!project) {
         return (
-            <p>Project not found.</p>
+            <>
+                <AppHeader />
+                <PageState
+                    title="Project not found"
+                    message="This project may no longer exist."
+                />
+            </>
         );
     }
 
     return (
-        <main className="project-page">
-            <div className="project-shell">
-                <header className="project-header">
-                    <div>
-                        <h1>{project.name}</h1>
+        <>
+            <AppHeader />
+            <main className="project-page">
+                <div className="project-shell">
+                    <Link
+                        to={`/workspaces/${workspaceId}`}
+                        className="project-back"
+                    >
+                        ← Back to workspace
+                    </Link>
+                    <header className="project-header">
+                        <div className="project-header-main">
+                            <div className="project-breadcrumbs">
+                                <Link to="/dashboard">
+                                    Dashboard
+                                </Link>
 
-                        {project.description && (
-                            <p>
-                                {project.description}
-                            </p>
-                        )}
-                    </div>
+                                <span>/</span>
 
-                    <div className="project-actions">
-                        <button
-                            type="button"
-                            className="primary-button"
-                            onClick={() =>
-                                setIsCreateModalOpen(
-                                    true,
-                                )
-                            }
-                        >
-                            + New task
-                        </button>
-                    </div>
-                </header>
+                                <Link
+                                    to={`/workspaces/${workspaceId}`}
+                                >
+                                    Workspace
+                                </Link>
 
-                <div className="board-layout">
-                    <DndContext onDragEnd={handleDragEnd}>
-                        <div className="kanban-board">
-                            <KanbanColumn
-                                status="TODO"
-                                label="To do"
-                                tasks={tasks.filter(
-                                    (task) => task.status === 'TODO',
-                                )}
-                                onOpenTask={openTask}
-                            />
+                                <span>/</span>
 
-                            <KanbanColumn
-                                status="IN_PROGRESS"
-                                label="In progress"
-                                tasks={tasks.filter(
-                                    (task) =>
-                                        task.status === 'IN_PROGRESS',
-                                )}
-                                onOpenTask={openTask}
-                            />
+                                <span>{project.name}</span>
+                            </div>
 
-                            <KanbanColumn
-                                status="REVIEW"
-                                label="Review"
-                                tasks={tasks.filter(
-                                    (task) =>
-                                        task.status === 'REVIEW',
-                                )}
-                                onOpenTask={openTask}
-                            />
+                            <div className="project-title-row">
+                                <div>
+                                    <h1>{project.name}</h1>
 
-                            <KanbanColumn
-                                status="DONE"
-                                label="Done"
-                                tasks={tasks.filter(
-                                    (task) => task.status === 'DONE',
-                                )}
-                                onOpenTask={openTask}
-                            />
+                                    {project.description && (
+                                        <p>{project.description}</p>
+                                    )}
+                                </div>
+
+                                <span className="project-task-count">
+                                    {tasks.length}{' '}
+                                    {tasks.length === 1
+                                        ? 'task'
+                                        : 'tasks'}
+                                </span>
+                            </div>
                         </div>
-                    </DndContext>
 
-                    <ActivityPanel
-                        activities={activities}
-                        loading={loadingActivity}
+                        <div className="project-actions">
+                            <button
+                                type="button"
+                                className="primary-button"
+                                onClick={() =>
+                                    setIsCreateModalOpen(true)
+                                }
+                            >
+                                + New task
+                            </button>
+                        </div>
+                    </header>
+
+                    <div className="board-layout">
+                        <DndContext onDragEnd={handleDragEnd}>
+                            <div className="kanban-board">
+                                <KanbanColumn
+                                    status="TODO"
+                                    label="To do"
+                                    tasks={tasks.filter(
+                                        (task) => task.status === 'TODO',
+                                    )}
+                                    onOpenTask={openTask}
+                                />
+
+                                <KanbanColumn
+                                    status="IN_PROGRESS"
+                                    label="In progress"
+                                    tasks={tasks.filter(
+                                        (task) =>
+                                            task.status === 'IN_PROGRESS',
+                                    )}
+                                    onOpenTask={openTask}
+                                />
+
+                                <KanbanColumn
+                                    status="REVIEW"
+                                    label="Review"
+                                    tasks={tasks.filter(
+                                        (task) =>
+                                            task.status === 'REVIEW',
+                                    )}
+                                    onOpenTask={openTask}
+                                />
+
+                                <KanbanColumn
+                                    status="DONE"
+                                    label="Done"
+                                    tasks={tasks.filter(
+                                        (task) => task.status === 'DONE',
+                                    )}
+                                    onOpenTask={openTask}
+                                />
+                            </div>
+                        </DndContext>
+
+                        <ActivityPanel
+                            activities={activities}
+                            loading={loadingActivity}
+                        />
+                    </div>
+
+                    <CreateTaskModal
+                        isOpen={
+                            isCreateModalOpen
+                        }
+                        title={newTaskTitle}
+                        description={
+                            newTaskDescription
+                        }
+                        priority={
+                            newTaskPriority
+                        }
+                        dueDate={
+                            newTaskDueDate
+                        }
+                        assigneeId={
+                            newTaskAssigneeId
+                        }
+                        members={members}
+                        creating={creatingTask}
+                        onTitleChange={
+                            setNewTaskTitle
+                        }
+                        onDescriptionChange={
+                            setNewTaskDescription
+                        }
+                        onPriorityChange={
+                            setNewTaskPriority
+                        }
+                        onDueDateChange={
+                            setNewTaskDueDate
+                        }
+                        onAssigneeChange={
+                            setNewTaskAssigneeId
+                        }
+                        onClose={() =>
+                            setIsCreateModalOpen(
+                                false,
+                            )
+                        }
+                        onCreate={() =>
+                            void createTask()
+                        }
+                    />
+
+                    <TaskDetailsModal
+                        task={selectedTask}
+                        members={members}
+                        comments={comments}
+                        newComment={
+                            newComment
+                        }
+                        loadingComments={
+                            loadingComments
+                        }
+                        postingComment={
+                            postingComment
+                        }
+                        savingTask={
+                            savingTask
+                        }
+                        deletingTask={deletingTask}
+                        onDelete={() =>
+                            void deleteSelectedTask()
+                        }
+                        onTaskChange={
+                            setSelectedTask
+                        }
+                        onCommentChange={
+                            setNewComment
+                        }
+                        onClose={() => {
+                            setSelectedTask(null);
+                            setComments([]);
+                            setNewComment('');
+                        }}
+                        onSave={() =>
+                            void saveSelectedTask()
+                        }
+                        onPostComment={() =>
+                            void postComment()
+                        }
                     />
                 </div>
-
-                <CreateTaskModal
-                    isOpen={
-                        isCreateModalOpen
-                    }
-                    title={newTaskTitle}
-                    description={
-                        newTaskDescription
-                    }
-                    priority={
-                        newTaskPriority
-                    }
-                    dueDate={
-                        newTaskDueDate
-                    }
-                    assigneeId={
-                        newTaskAssigneeId
-                    }
-                    members={members}
-                    creating={creatingTask}
-                    onTitleChange={
-                        setNewTaskTitle
-                    }
-                    onDescriptionChange={
-                        setNewTaskDescription
-                    }
-                    onPriorityChange={
-                        setNewTaskPriority
-                    }
-                    onDueDateChange={
-                        setNewTaskDueDate
-                    }
-                    onAssigneeChange={
-                        setNewTaskAssigneeId
-                    }
-                    onClose={() =>
-                        setIsCreateModalOpen(
-                            false,
-                        )
-                    }
-                    onCreate={() =>
-                        void createTask()
-                    }
-                />
-
-                <TaskDetailsModal
-                    task={selectedTask}
-                    members={members}
-                    comments={comments}
-                    newComment={
-                        newComment
-                    }
-                    loadingComments={
-                        loadingComments
-                    }
-                    postingComment={
-                        postingComment
-                    }
-                    savingTask={
-                        savingTask
-                    }
-                    onTaskChange={
-                        setSelectedTask
-                    }
-                    onCommentChange={
-                        setNewComment
-                    }
-                    onClose={() => {
-                        setSelectedTask(null);
-                        setComments([]);
-                        setNewComment('');
-                    }}
-                    onSave={() =>
-                        void saveSelectedTask()
-                    }
-                    onPostComment={() =>
-                        void postComment()
-                    }
-                />
-            </div>
-        </main>
+            </main>
+        </>
     );
 }

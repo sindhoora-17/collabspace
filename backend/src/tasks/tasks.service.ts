@@ -129,11 +129,25 @@ export class TasksService {
       },
       data: {
         title: dto.title?.trim(),
-        description: dto.description?.trim(),
+
+        description:
+          dto.description === undefined
+            ? undefined
+            : dto.description?.trim() || null,
+
         status: dto.status,
+
         priority: dto.priority,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+
+        dueDate:
+          dto.dueDate === undefined
+            ? undefined
+            : dto.dueDate
+              ? new Date(dto.dueDate)
+              : null,
+
         assigneeId: dto.assigneeId,
+
         position: dto.position,
       },
       include: {
@@ -176,6 +190,50 @@ export class TasksService {
     this.realtimeGateway.emitTaskUpdated(projectId, updatedTask);
 
     return updatedTask;
+  }
+
+  async remove(
+    userId: string,
+    workspaceId: string,
+    projectId: string,
+    taskId: string,
+  ) {
+    await this.ensureProjectAccess(userId, workspaceId, projectId);
+
+    const task = await this.prisma.task.findFirst({
+      where: {
+        id: taskId,
+        projectId,
+      },
+    });
+
+    if (!task) {
+      throw new NotFoundException('Task not found');
+    }
+
+    const activity = await this.activityService.create({
+      type: ActivityType.TASK_DELETED,
+      message: `deleted task "${task.title}"`,
+      projectId,
+      actorId: userId,
+      taskId: task.id,
+      metadata: {
+        taskTitle: task.title,
+      },
+    });
+
+    this.realtimeGateway.emitActivityCreated(projectId, activity);
+
+    await this.prisma.task.delete({
+      where: {
+        id: taskId,
+      },
+    });
+    this.realtimeGateway.emitTaskDeleted(projectId, taskId);
+    return {
+      success: true,
+      taskId,
+    };
   }
 
   private async ensureProjectAccess(

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -22,9 +23,7 @@ type AuthenticatedRequest = Request & {
   };
 };
 
-@Controller(
-  'api/v1/workspaces/:workspaceId/projects/:projectId/tasks',
-)
+@Controller('api/v1/workspaces/:workspaceId/projects/:projectId/tasks')
 @UseGuards(JwtAuthGuard)
 export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
@@ -54,6 +53,21 @@ export class TasksController {
       request.user.userId,
       workspaceId,
       projectId,
+    );
+  }
+
+  @Delete(':taskId')
+  async remove(
+    @Req() request: AuthenticatedRequest,
+    @Param('workspaceId') workspaceId: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.tasksService.remove(
+      request.user.userId,
+      workspaceId,
+      projectId,
+      taskId,
     );
   }
 

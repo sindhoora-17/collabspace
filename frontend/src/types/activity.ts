@@ -1,8 +1,9 @@
 export type ActivityType =
-  | 'TASK_CREATED'
-  | 'TASK_UPDATED'
-  | 'TASK_MOVED'
-  | 'COMMENT_ADDED';
+  | "TASK_CREATED"
+  | "TASK_UPDATED"
+  | "TASK_MOVED"
+  | "TASK_DELETED"
+  | "COMMENT_ADDED";
 
 export type Activity = {
   id: string;
@@ -11,6 +12,7 @@ export type Activity = {
   metadata: {
     fromStatus?: string;
     toStatus?: string;
+    taskTitle?: string;
   } | null;
   createdAt: string;
   projectId: string;

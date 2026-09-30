@@ -51,4 +51,7 @@ export class RealtimeGateway {
     this.server.to(`project:${projectId}`).emit('activityCreated', activity);
   }
 
+  emitTaskDeleted(projectId: string, taskId: string) {
+    this.server.to(`project:${projectId}`).emit('taskDeleted', { taskId });
+  }
 }

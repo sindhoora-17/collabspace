@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-type User = {
+export type User = {
   id: string;
   email: string;
   displayName: string;
@@ -9,29 +9,47 @@ type User = {
 type AuthState = {
   accessToken: string | null;
   user: User | null;
-  setAuth: (accessToken: string, user: User) => void;
+
+  setAuth: (
+    accessToken: string,
+    user: User,
+  ) => void;
+
   clearAuth: () => void;
 };
 
-export const useAuthStore = create<AuthState>((set) => ({
-  accessToken: localStorage.getItem('accessToken'),
-  user: null,
+export const useAuthStore =
+  create<AuthState>((set) => ({
+    accessToken:
+      localStorage.getItem(
+        'accessToken',
+      ),
 
-  setAuth: (accessToken, user) => {
-    localStorage.setItem('accessToken', accessToken);
+    user: null,
 
-    set({
+    setAuth: (
       accessToken,
       user,
-    });
-  },
+    ) => {
+      localStorage.setItem(
+        'accessToken',
+        accessToken,
+      );
 
-  clearAuth: () => {
-    localStorage.removeItem('accessToken');
+      set({
+        accessToken,
+        user,
+      });
+    },
 
-    set({
-      accessToken: null,
-      user: null,
-    });
-  },
-}));
+    clearAuth: () => {
+      localStorage.removeItem(
+        'accessToken',
+      );
+
+      set({
+        accessToken: null,
+        user: null,
+      });
+    },
+  }));
