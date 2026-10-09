@@ -92,7 +92,7 @@
   gap: 13px;
 }
 
-.project-title-row > div {
+.project-title-row>div {
   min-width: 0;
 }
 
@@ -224,10 +224,8 @@
 
 .kanban-board {
   display: grid;
-  grid-template-columns: repeat(
-    4,
-    minmax(220px, 1fr)
-  );
+  grid-template-columns: repeat(4,
+      minmax(220px, 1fr));
 
   gap: 12px;
 
@@ -252,7 +250,7 @@
   border: 1px solid #dbe3ed;
   border-radius: 13px;
 
-  overflow: hidden;
+  overflow: visible;
 
   transition:
     background 0.15s ease,
@@ -450,6 +448,26 @@
   gap: 6px;
 
   margin-top: 11px;
+}
+
+.task-card {
+  position: relative;
+  z-index: 1;
+}
+
+.task-card[aria-pressed="true"] {
+  z-index: 1000;
+}
+
+.task-card--dragging {
+  position: relative;
+  z-index: 1000;
+
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.18),
+    0 4px 12px rgba(15, 23, 42, 0.12);
+
+  cursor: grabbing;
 }
 
 .priority-badge {

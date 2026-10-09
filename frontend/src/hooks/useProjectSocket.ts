@@ -10,6 +10,7 @@ type Comment = {
   createdAt: string;
   updatedAt: string;
   taskId: string;
+
   author: {
     id: string;
     email: string;
@@ -17,7 +18,7 @@ type Comment = {
   };
 };
 
-const socket = io("http://localhost:3000", {
+const socket = io(import.meta.env.VITE_SOCKET_URL ?? "http://localhost:3000", {
   autoConnect: false,
 });
 
@@ -46,6 +47,10 @@ export function useProjectSocket({
     if (!projectId) {
       return;
     }
+
+    socket.auth = {
+      token: localStorage.getItem("accessToken"),
+    };
 
     socket.connect();
 
@@ -76,16 +81,24 @@ export function useProjectSocket({
     }
 
     socket.on("taskCreated", handleTaskCreated);
+
     socket.on("taskUpdated", handleTaskUpdated);
+
     socket.on("commentCreated", handleCommentCreated);
+
     socket.on("activityCreated", handleActivityCreated);
+
     socket.on("taskDeleted", handleTaskDeleted);
 
     return () => {
       socket.off("taskCreated", handleTaskCreated);
+
       socket.off("taskUpdated", handleTaskUpdated);
+
       socket.off("commentCreated", handleCommentCreated);
-      socket.on("activityCreated", handleActivityCreated);
+
+      socket.off("activityCreated", handleActivityCreated);
+
       socket.off("taskDeleted", handleTaskDeleted);
 
       socket.disconnect();

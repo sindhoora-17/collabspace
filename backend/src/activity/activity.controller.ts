@@ -25,9 +25,14 @@ export class ActivityController {
 
   @Get()
   async getProjectActivity(
+    @Param('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
-    @Req() _request: AuthenticatedRequest,
+    @Req() request: AuthenticatedRequest,
   ) {
-    return this.activityService.findByProject(projectId);
+    return this.activityService.findByProject(
+      workspaceId,
+      projectId,
+      request.user.userId,
+    );
   }
 }
