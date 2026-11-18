@@ -1,135 +1,90 @@
+import { relativeTime } from '../../lib/format';
 import type { Activity } from '../../types/activity';
+import { Avatar } from '../common/Avatar';
 
 type ActivityPanelProps = {
-    activities: Activity[];
-    loading: boolean;
+  activities: Activity[];
+  loading: boolean;
 };
 
-function formatStatus(status?: string) {
-    if (!status) {
-        return '';
-    }
+const statusLabel: Record<string, string> = {
+  TODO: 'To do',
+  IN_PROGRESS: 'In progress',
+  REVIEW: 'Review',
+  DONE: 'Done',
+};
 
-    return status
-        .toLowerCase()
-        .replaceAll('_', ' ')
-        .replace(/\b\w/g, (character) =>
-            character.toUpperCase(),
-        );
+function describe(activity: Activity) {
+  const title = activity.task?.title ?? activity.metadata?.taskTitle ?? 'a task';
+  const t = <span className="activity-task">{title}</span>;
+
+  switch (activity.type) {
+    case 'TASK_CREATED':
+      return <>created {t}</>;
+    case 'TASK_UPDATED':
+      return <>updated {t}</>;
+    case 'TASK_DELETED':
+      return <>deleted {t}</>;
+    case 'COMMENT_ADDED':
+      return <>commented on {t}</>;
+    case 'TASK_MOVED':
+      return (
+        <>
+          moved {t} to{' '}
+          <span className="activity-status">
+            {statusLabel[activity.metadata?.toStatus ?? ''] ?? 'another column'}
+          </span>
+        </>
+      );
+    default:
+      return activity.message;
+  }
 }
 
-function getActivityText(activity: Activity) {
-    const actor =
-        activity.actor.displayName ||
-        activity.actor.email;
+export function ActivityPanel({ activities, loading }: ActivityPanelProps) {
+  return (
+    <aside className="activity-panel">
+      <header className="activity-panel-header">
+        <h2>Activity</h2>
+        <span className="live-pill">
+          <span className="live-dot" /> Live
+        </span>
+      </header>
 
-    const taskTitle =
-        activity.task?.title ?? 'a task';
+      {loading && <p className="activity-empty">Loading activity…</p>}
 
-    switch (activity.type) {
-        case 'TASK_CREATED':
-            return (
-                <>
-                    <strong>{actor}</strong> created{' '}
-                    <strong>{taskTitle}</strong>
-                </>
-            );
+      {!loading && activities.length === 0 && (
+        <p className="activity-empty">
+          Nothing yet. Changes from your team will show up here as they happen.
+        </p>
+      )}
 
-        case 'TASK_MOVED':
-            return (
-                <>
-                    <strong>{actor}</strong> moved{' '}
-                    <strong>{taskTitle}</strong> from{' '}
-                    {formatStatus(
-                        activity.metadata?.fromStatus,
-                    )}{' '}
-                    to{' '}
-                    {formatStatus(
-                        activity.metadata?.toStatus,
-                    )}
-                </>
-            );
-
-        case 'TASK_UPDATED':
-            return (
-                <>
-                    <strong>{actor}</strong> updated{' '}
-                    <strong>{taskTitle}</strong>
-                </>
-            );
-
-        case 'TASK_DELETED':
-            return (
-                <>
-                    <strong>{actor}</strong> deleted{' '}
-                    <strong>
-                        {activity.metadata?.taskTitle ?? 'a task'}
-                    </strong>
-                </>
-            );
-
-        case 'COMMENT_ADDED':
-            return (
-                <>
-                    <strong>{actor}</strong> commented on{' '}
-                    <strong>{taskTitle}</strong>
-                </>
-            );
-
-        default:
-            return activity.message;
-    }
-}
-
-export function ActivityPanel({
-    activities,
-    loading,
-}: ActivityPanelProps) {
-    return (
-        <aside className="activity-panel">
-            <div className="activity-panel-header">
-                <h2>Activity</h2>
-
-                <span className="activity-count">
-                    {activities.length}
-                </span>
+      <ol className="activity-list">
+        {activities.map((activity) => (
+          <li key={activity.id} className="activity-item">
+            <Avatar
+              id={activity.actor.id}
+              name={activity.actor.displayName || activity.actor.email}
+              size={24}
+            />
+            <div>
+              <p className="activity-text">
+                <span className="activity-actor">
+                  {activity.actor.displayName || activity.actor.email}
+                </span>{' '}
+                {describe(activity)}
+              </p>
+              <time
+                className="activity-time"
+                dateTime={activity.createdAt}
+                title={new Date(activity.createdAt).toLocaleString()}
+              >
+                {relativeTime(activity.createdAt)}
+              </time>
             </div>
-
-            {loading && (
-                <p className="empty-text">
-                    Loading activity...
-                </p>
-            )}
-
-            {!loading &&
-                activities.length === 0 && (
-                    <p className="empty-text">
-                        No activity yet.
-                    </p>
-                )}
-
-            <div className="activity-list">
-                {activities.map((activity) => (
-                    <article
-                        key={activity.id}
-                        className="activity-item"
-                    >
-                        <div className="activity-dot" />
-
-                        <div>
-                            <p className="activity-text">
-                                {getActivityText(activity)}
-                            </p>
-
-                            <span className="activity-time">
-                                {new Date(
-                                    activity.createdAt,
-                                ).toLocaleString()}
-                            </span>
-                        </div>
-                    </article>
-                ))}
-            </div>
-        </aside>
-    );
+          </li>
+        ))}
+      </ol>
+    </aside>
+  );
 }

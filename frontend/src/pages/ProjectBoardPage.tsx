@@ -5,7 +5,13 @@ import {
 } from 'react';
 import { useParams } from 'react-router-dom';
 import { Link } from 'react-router-dom';
-import { DndContext } from '@dnd-kit/core';
+import {
+    DndContext,
+    PointerSensor,
+    KeyboardSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
 import type { DragEndEvent } from '@dnd-kit/core';
 
 import { api } from '../api/client';
@@ -19,6 +25,7 @@ import { ActivityPanel } from '../components/activity/ActivityPanel';
 import type { Activity } from '../types/activity';
 
 import { AppHeader } from '../components/layout/AppHeader';
+import { Avatar } from '../components/common/Avatar';
 
 import type {
     Task,
@@ -60,11 +67,11 @@ const columns: {
 }[] = [
         {
             status: 'TODO',
-            label: 'To Do',
+            label: 'To do',
         },
         {
             status: 'IN_PROGRESS',
-            label: 'In Progress',
+            label: 'In progress',
         },
         {
             status: 'REVIEW',
@@ -87,6 +94,19 @@ export function ProjectBoardPage() {
         useState<WorkspaceMember[]>([]);
 
     const [loading, setLoading] = useState(true);
+    // Load errors replace the page; action errors only show a toast.
+    const [actionError, setActionError] =
+        useState<string | null>(null);
+    const [workspaceName, setWorkspaceName] =
+        useState('Workspace');
+    const [newTaskStatus, setNewTaskStatus] =
+        useState<TaskStatus>('TODO');
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 6 },
+        }),
+        useSensor(KeyboardSensor),
+    );
     const [error, setError] =
         useState<string | null>(null);
 
@@ -123,6 +143,9 @@ export function ProjectBoardPage() {
 
     const [selectedTask, setSelectedTask] =
         useState<Task | null>(null);
+
+    const [selectedTaskDirty, setSelectedTaskDirty] =
+        useState(false);
 
     const [savingTask, setSavingTask] =
         useState(false);
@@ -164,6 +187,7 @@ export function ProjectBoardPage() {
                     tasksResponse,
                     membersResponse,
                     activityResponse,
+                    workspaceResponse,
                 ] = await Promise.all([
                     api.get<Project>(
                         `/workspaces/${workspaceId}/projects/${projectId}`,
@@ -179,7 +203,12 @@ export function ProjectBoardPage() {
                     api.get<Activity[]>(
                         `/workspaces/${workspaceId}/projects/${projectId}/activity`,
                     ),
+                    api.get<{ name: string }>(
+                        `/workspaces/${workspaceId}`,
+                    ),
                 ]);
+
+                setWorkspaceName(workspaceResponse.data.name);
 
                 setProject(projectResponse.data);
                 setTasks(tasksResponse.data);
@@ -223,7 +252,7 @@ export function ProjectBoardPage() {
 
                     priority: newTaskPriority,
 
-                    status: 'TODO',
+                    status: newTaskStatus,
 
                     dueDate:
                         newTaskDueDate || undefined,
@@ -260,9 +289,7 @@ export function ProjectBoardPage() {
 
             setIsCreateModalOpen(false);
         } catch {
-            setError(
-                'Could not create task.',
-            );
+            setActionError('Could not create task.');
         } finally {
             setCreatingTask(false);
         }
@@ -353,9 +380,7 @@ export function ProjectBoardPage() {
                 ),
             );
 
-            setError(
-                'Could not move task.',
-            );
+            setActionError('Could not move task.');
         }
     }
 
@@ -383,6 +408,8 @@ export function ProjectBoardPage() {
 
                         priority: selectedTask.priority,
 
+                        status: selectedTask.status,
+
                         dueDate:
                             selectedTask.dueDate || null,
 
@@ -400,11 +427,10 @@ export function ProjectBoardPage() {
                 ),
             );
 
+            setSelectedTaskDirty(false);
             setSelectedTask(null);
         } catch {
-            setError(
-                'Could not update task.',
-            );
+            setActionError('Could not update task.');
         } finally {
             setSavingTask(false);
         }
@@ -430,9 +456,7 @@ export function ProjectBoardPage() {
 
             setComments(response.data);
         } catch {
-            setError(
-                'Could not load comments.',
-            );
+            setActionError('Could not load comments.');
         } finally {
             setLoadingComments(false);
         }
@@ -440,6 +464,7 @@ export function ProjectBoardPage() {
 
     function openTask(task: Task) {
         setSelectedTask(task);
+        setSelectedTaskDirty(false);
 
         setComments([]);
         setNewComment('');
@@ -490,9 +515,7 @@ export function ProjectBoardPage() {
 
             setNewComment('');
         } catch {
-            setError(
-                'Could not add comment.',
-            );
+            setActionError('Could not add comment.');
         } finally {
             setPostingComment(false);
         }
@@ -530,11 +553,12 @@ export function ProjectBoardPage() {
                 ),
             );
 
+            setSelectedTaskDirty(false);
             setSelectedTask(null);
             setComments([]);
             setNewComment('');
         } catch {
-            setError('Could not delete task.');
+            setActionError('Could not delete task.');
         } finally {
             setDeletingTask(false);
         }
@@ -562,30 +586,39 @@ export function ProjectBoardPage() {
         }, []);
 
     const handleTaskUpdated =
-        useCallback((task: Task) => {
-            setTasks((currentTasks) =>
-                currentTasks.map(
-                    (currentTask) =>
-                        currentTask.id === task.id
-                            ? task
-                            : currentTask,
-                ),
-            );
+        useCallback(
+            (task: Task) => {
+                setTasks((currentTasks) =>
+                    currentTasks.map(
+                        (currentTask) =>
+                            currentTask.id === task.id
+                                ? task
+                                : currentTask,
+                    ),
+                );
 
-            setSelectedTask(
-                (currentTask) => {
-                    if (
-                        !currentTask ||
-                        currentTask.id !==
-                        task.id
-                    ) {
-                        return currentTask;
-                    }
+                setSelectedTask(
+                    (currentTask) => {
+                        if (
+                            !currentTask ||
+                            currentTask.id !== task.id
+                        ) {
+                            return currentTask;
+                        }
 
-                    return task;
-                },
-            );
-        }, []);
+                        if (selectedTaskDirty) {
+                            setActionError(
+                                'This task was updated elsewhere. Your unsaved edits were kept.',
+                            );
+                            return currentTask;
+                        }
+
+                        return task;
+                    },
+                );
+            },
+            [selectedTaskDirty],
+        );
 
     const handleCommentCreated =
         useCallback(
@@ -649,6 +682,7 @@ export function ProjectBoardPage() {
                     currentTask &&
                     currentTask.id === taskId
                 ) {
+                    setSelectedTaskDirty(false);
                     setComments([]);
                     setNewComment('');
 
@@ -723,103 +757,61 @@ export function ProjectBoardPage() {
             <AppHeader />
             <main className="project-page">
                 <div className="project-shell">
-                    <Link
-                        to={`/workspaces/${workspaceId}`}
-                        className="project-back"
-                    >
-                        ← Back to workspace
-                    </Link>
                     <header className="project-header">
                         <div className="project-header-main">
-                            <div className="project-breadcrumbs">
-                                <Link to="/dashboard">
-                                    Dashboard
+                            <nav className="breadcrumbs" aria-label="Breadcrumb">
+                                <Link to={`/workspaces/${workspaceId}`}>
+                                    {workspaceName}
                                 </Link>
-
-                                <span>/</span>
-
-                                <Link
-                                    to={`/workspaces/${workspaceId}`}
-                                >
-                                    Workspace
-                                </Link>
-
-                                <span>/</span>
-
-                                <span>{project.name}</span>
-                            </div>
-
-                            <div className="project-title-row">
-                                <div>
-                                    <h1>{project.name}</h1>
-
-                                    {project.description && (
-                                        <p>{project.description}</p>
-                                    )}
-                                </div>
-
-                                <span className="project-task-count">
-                                    {tasks.length}{' '}
-                                    {tasks.length === 1
-                                        ? 'task'
-                                        : 'tasks'}
-                                </span>
-                            </div>
+                                <span aria-hidden="true">/</span>
+                                <span aria-current="page">{project.name}</span>
+                            </nav>
+                            <h1>{project.name}</h1>
+                            {project.description && <p>{project.description}</p>}
                         </div>
 
                         <div className="project-actions">
+                            <div className="avatar-stack">
+                                {members.slice(0, 4).map((member) => (
+                                    <Avatar
+                                        key={member.user.id}
+                                        id={member.user.id}
+                                        name={member.user.displayName}
+                                        size={28}
+                                    />
+                                ))}
+                            </div>
                             <button
                                 type="button"
                                 className="primary-button"
-                                onClick={() =>
-                                    setIsCreateModalOpen(true)
-                                }
+                                onClick={() => {
+                                    setNewTaskStatus('TODO');
+                                    setIsCreateModalOpen(true);
+                                }}
                             >
-                                + New task
+                                New task
                             </button>
                         </div>
                     </header>
 
                     <div className="board-layout">
-                        <DndContext onDragEnd={handleDragEnd}>
+                        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
                             <div className="kanban-board">
-                                <KanbanColumn
-                                    status="TODO"
-                                    label="To do"
-                                    tasks={tasks.filter(
-                                        (task) => task.status === 'TODO',
-                                    )}
-                                    onOpenTask={openTask}
-                                />
-
-                                <KanbanColumn
-                                    status="IN_PROGRESS"
-                                    label="In progress"
-                                    tasks={tasks.filter(
-                                        (task) =>
-                                            task.status === 'IN_PROGRESS',
-                                    )}
-                                    onOpenTask={openTask}
-                                />
-
-                                <KanbanColumn
-                                    status="REVIEW"
-                                    label="Review"
-                                    tasks={tasks.filter(
-                                        (task) =>
-                                            task.status === 'REVIEW',
-                                    )}
-                                    onOpenTask={openTask}
-                                />
-
-                                <KanbanColumn
-                                    status="DONE"
-                                    label="Done"
-                                    tasks={tasks.filter(
-                                        (task) => task.status === 'DONE',
-                                    )}
-                                    onOpenTask={openTask}
-                                />
+                                {columns.map((column) => (
+                                    <KanbanColumn
+                                        key={column.status}
+                                        status={column.status}
+                                        label={column.label}
+                                        tasks={tasks.filter(
+                                            (task) => task.status === column.status,
+                                        )}
+                                        onOpenTask={openTask}
+                                        onAddTask={(status) => {
+                                            setNewTaskStatus(status);
+                                            setIsCreateModalOpen(true);
+                                        }}
+                                    />
+                                ))}
                             </div>
                         </DndContext>
 
@@ -828,6 +820,15 @@ export function ProjectBoardPage() {
                             loading={loadingActivity}
                         />
                     </div>
+
+                    {actionError && (
+                        <div className="toast" role="alert">
+                            {actionError}
+                            <button type="button" onClick={() => setActionError(null)}>
+                                Dismiss
+                            </button>
+                        </div>
+                    )}
 
                     <CreateTaskModal
                         isOpen={
@@ -893,14 +894,16 @@ export function ProjectBoardPage() {
                         onDelete={() =>
                             void deleteSelectedTask()
                         }
-                        onTaskChange={
-                            setSelectedTask
-                        }
+                        onTaskChange={(task) => {
+                            setSelectedTask(task);
+                            setSelectedTaskDirty(true);
+                        }}
                         onCommentChange={
                             setNewComment
                         }
                         onClose={() => {
                             setSelectedTask(null);
+                            setSelectedTaskDirty(false);
                             setComments([]);
                             setNewComment('');
                         }}

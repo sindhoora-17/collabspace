@@ -1,107 +1,73 @@
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
+
 import '../../styles/kanban.css';
+import { dueState, shortDate } from '../../lib/format';
 import type { Task } from '../../types/tasks';
+import { Avatar } from '../common/Avatar';
 
 type TaskCardProps = {
   task: Task;
   onOpen: (task: Task) => void;
 };
 
-export function TaskCard({
-  task,
-  onOpen,
-}: TaskCardProps) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    isDragging,
-  } = useDraggable({
-    id: task.id,
-  });
+const priorityLabel = {
+  LOW: 'Low',
+  MEDIUM: 'Medium',
+  HIGH: 'High',
+  URGENT: 'Urgent',
+} as const;
 
-  //   const style = {
-  //     transform: transform
-  //       ? CSS.Translate.toString(transform)
-  //       : undefined,
-  //     border: '1px solid #ccc',
-  //     borderRadius: '8px',
-  //     padding: '12px',
-  //     marginBottom: '12px',
-  //     background: 'white',
-  //     cursor: 'grab',
-  //   };
+export function TaskCard({ task, onOpen }: TaskCardProps) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: task.id });
+
+  const isDone = task.status === 'DONE';
 
   return (
     <article
       ref={setNodeRef}
-      className={`task-card ${isDragging ? 'task-card--dragging' : ''
-        }`}
+      className={`task-card${isDragging ? ' task-card--dragging' : ''}${
+        isDone ? ' task-card--done' : ''
+      }`}
       style={{
-        transform: transform
-          ? CSS.Translate.toString(transform)
-          : undefined,
+        transform: transform ? CSS.Translate.toString(transform) : undefined,
       }}
       {...attributes}
+      {...listeners}
+      // The whole card opens the task. A drag needs 6px of movement first
+      // (PointerSensor activationConstraint), so clicks and drags don't clash.
+      onClick={() => onOpen(task)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') onOpen(task);
+      }}
     >
-      <div
-        className="task-card-header"
-        {...listeners}
-      >
-        <h3 className="task-card-title">
-          {task.title}
-        </h3>
-
-        <span
-          className="task-card-drag"
-          aria-hidden="true"
-        >
-          ⋮⋮
-        </span>
-      </div>
+      <h3 className="task-card-title">{task.title}</h3>
 
       {task.description && (
-        <p className="task-card-description">
-          {task.description}
-        </p>
-      )}
-
-      <div className="task-card-meta">
-        <span
-          className={`priority-badge priority-${task.priority.toLowerCase()}`}
-        >
-          {task.priority}
-        </span>
-
-        {task.dueDate && (
-          <span className="task-card-info">
-            Due{' '}
-            {new Date(
-              task.dueDate,
-            ).toLocaleDateString()}
-          </span>
-        )}
-      </div>
-
-      {task.assignee && (
-        <div
-          className="task-card-info"
-          style={{ marginTop: '10px' }}
-        >
-          {task.assignee.displayName}
-        </div>
+        <p className="task-card-description">{task.description}</p>
       )}
 
       <div className="task-card-footer">
-        <button
-          type="button"
-          className="task-details-button"
-          onClick={() => onOpen(task)}
-        >
-          View details
-        </button>
+        <span className={`priority priority--${task.priority.toLowerCase()}`}>
+          <span className="priority-dot" />
+          {priorityLabel[task.priority]}
+        </span>
+
+        {task.dueDate && (
+          <span
+            className={`due due--${isDone ? 'later' : dueState(task.dueDate)}`}
+            title={new Date(task.dueDate).toLocaleDateString()}
+          >
+            {shortDate(task.dueDate)}
+          </span>
+        )}
+
+        <span className="task-card-spacer" />
+
+        {task.assignee && (
+          <Avatar id={task.assignee.id} name={task.assignee.displayName} size={22} />
+        )}
       </div>
     </article>
   );
