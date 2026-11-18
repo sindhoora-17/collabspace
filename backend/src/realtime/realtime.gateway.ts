@@ -13,7 +13,7 @@ import type { Server, Socket } from 'socket.io';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 type JwtPayload = {
-  userId: string;
+  sub: string;
   email: string;
 };
 
@@ -80,7 +80,7 @@ export class RealtimeGateway {
           workspace: {
             members: {
               some: {
-                userId: payload.userId,
+                userId: payload.sub,
               },
             },
           },
