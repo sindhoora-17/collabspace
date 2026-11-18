@@ -65,58 +65,42 @@ The application is designed around a production-style cloud architecture using A
 
 ## AWS Architecture
 
-CollabSpace uses AWS services to separate the frontend, backend, database, configuration, and monitoring layers.
+CollabSpace separates static frontend hosting from backend compute, database, configuration, and logging.
 
 ```text
-                         ┌──────────────────────┐
-                         │        Users         │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │     CloudFront       │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │   S3 React Frontend  │
-                         └──────────┬───────────┘
-                                    │
-                             HTTPS / WebSocket
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │    ECS / Fargate     │
-                         │      NestJS API      │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                         ┌──────────────────────┐
-                         │   Amazon RDS         │
-                         │   PostgreSQL         │
-                         └──────────────────────┘
+Users
+  │
+  │ HTTPS
+  ▼
+CloudFront
+  │
+  ▼
+Private S3 bucket
+React / Vite frontend
 
-          ┌───────────────────┐
-          │    Amazon ECR     │
-          │ Container Images  │
-          └─────────┬─────────┘
-                    │
-                    ▼
-              ECS / Fargate
 
-          ┌───────────────────┐
-          │ Parameter Store   │
-          │ Secrets / Config  │
-          └─────────┬─────────┘
-                    │
-                    ▼
-               NestJS API
+Docker build
+  │
+  ▼
+Amazon ECR
+  │
+  ▼
+ECS / Fargate
+NestJS API
+  │
+  ▼
+Amazon RDS
+PostgreSQL
 
-          ┌───────────────────┐
-          │    CloudWatch     │
-          │ Logs / Monitoring │
-          └───────────────────┘
+Parameter Store ──► ECS runtime configuration
+CloudWatch Logs ◄── ECS application/container logs
 ```
+
+The frontend is currently deployed through **S3 + CloudFront**. The ECS/Fargate backend and RDS database are operated on demand to control portfolio-project cost.
+
+A permanently running Application Load Balancer is intentionally not part of the current always-on environment. A temporary or permanent ALB can be added when a stable public HTTPS API/WebSocket endpoint is needed.
+
+For the complete AWS setup, deployment flow, resource responsibilities, security notes, and cost-conscious operating model, see **[AWS Deployment](docs/aws-deployment.md)**.
 
 ## Backend Deployment
 
@@ -395,7 +379,7 @@ In the AWS deployment workflow, the image is pushed to Amazon ECR and used by EC
 
 ## Deployment Flow
 
-The backend deployment flow follows this general process:
+### Backend
 
 ```text
 Source Code
@@ -413,37 +397,64 @@ Amazon RDS PostgreSQL
 
 Application configuration is provided through AWS Systems Manager Parameter Store, and runtime logs are available through CloudWatch.
 
-The frontend architecture is designed for static deployment using Amazon S3 with CloudFront distribution.
+### Frontend
+
+```text
+React / TypeScript
+    ↓
+Vite Production Build
+    ↓
+Private Amazon S3 Bucket
+    ↓
+Amazon CloudFront
+    ↓
+HTTPS Frontend
+```
+
+CloudFront uses the S3 bucket as a private origin, serves `index.html` as the default root object, and maps 403/404 responses back to `index.html` so React Router routes can be refreshed directly.
+
+See **[docs/aws-deployment.md](docs/aws-deployment.md)** for the detailed deployment architecture and operating notes.
 
 ## Current Status
 
-The core collaboration application is implemented, including:
+Implemented and verified:
 
 - Authentication
-- Workspace creation
-- Workspace membership
-- Invitations
+- Workspace creation and membership
+- OWNER / ADMIN / MEMBER authorization
+- Token-based invitations
 - Projects
 - Kanban task management
 - Task assignment
 - Task priorities and due dates
 - Comments
 - Activity tracking
-- Real-time WebSocket updates
-- PostgreSQL persistence
-- Dockerized backend
-- AWS backend deployment
-- Amazon RDS integration
-- ECR container storage
-- ECS/Fargate execution
-- Parameter Store configuration
+- Real-time Socket.IO updates
+- JWT-authenticated project-room subscriptions
+- Protection against realtime updates overwriting unsaved task edits
+- PostgreSQL persistence with Prisma migrations
+- Dockerized NestJS backend
+- Amazon ECR image storage
+- ECS/Fargate backend deployment
+- Amazon RDS PostgreSQL integration
+- Systems Manager Parameter Store configuration
 - CloudWatch logging
+- Private S3 frontend hosting
+- CloudFront HTTPS delivery and SPA route fallback
 
-Future improvements may include:
+### Current hosting model
 
+The static frontend remains available through S3 + CloudFront.
+
+The backend and RDS database are intentionally run on demand to control cost. The current environment does not keep an Application Load Balancer running continuously, so the CloudFront-hosted frontend is not presented as a permanently wired public full-stack demo.
+
+For a recorded demo or a continuously available deployment, the next infrastructure step is to place a stable HTTPS endpoint such as an ALB in front of ECS and build the frontend with the corresponding production API and Socket.IO URLs.
+
+### Future improvements
+
+- CI/CD automation for frontend and backend deployments
+- Stable public HTTPS API/WebSocket endpoint for an always-on demo
 - Expanded automated test coverage
-- CI/CD automation
-- Production frontend deployment
 - Notification support
 - Additional workspace administration controls
 - More advanced project analytics
